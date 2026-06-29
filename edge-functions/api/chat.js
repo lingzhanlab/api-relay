@@ -4,9 +4,9 @@
 //   - stream=true 返回 text/plain 纯文本流，前端逐字显示
 import {
   getAllProviders, parseModelOverrides, resolveApiKey,
-  corsHeaders, handlePreflight, checkAuth,
+  corsHeaders, handlePreflight,
   buildUpstreamRequest, parseUpstreamResponse, parseUpstreamUsage,
-  createTextStream,
+  createTextStream, sanitizeUpstreamError, fetchWithTimeout, validateMessages, logError,
 } from '../_shared.js';
 
 export default async function onRequest(context) {
@@ -20,8 +20,11 @@ export default async function onRequest(context) {
       { status: 405, headers: corsHeaders(env) });
   }
 
-  const authErr = checkAuth(env, request);
-  if (authErr) return authErr;
+  // 聊天页关闭时，/api/chat 也拒绝（防止陌生人绕过前端直接调接口白嫖）
+  if (env.ENABLE_CHAT_PAGE !== 'true') {
+    return new Response(JSON.stringify({ error: { message: '聊天页未启用', type: 'forbidden_error' } }),
+      { status: 403, headers: corsHeaders(env) });
+  }
 
   try {
     const body = await request.json();
@@ -43,6 +46,12 @@ export default async function onRequest(context) {
         { status: 400, headers: corsHeaders(env) });
     }
 
+    const validErr = validateMessages(messages);
+    if (validErr) {
+      return new Response(JSON.stringify({ error: { message: validErr, type: 'invalid_request_error' } }),
+        { status: 400, headers: corsHeaders(env) });
+    }
+
     const all = getAllProviders(env);
     const cfg = all[provider];
     if (!cfg) {
@@ -59,13 +68,19 @@ export default async function onRequest(context) {
     }
 
     const upReq = buildUpstreamRequest(cfg, messages, model, apiKey, env, { stream });
-    const upRes = await fetch(upReq.url, { method: 'POST', headers: upReq.headers, body: upReq.body });
+    let upRes;
+    try {
+      upRes = await fetchWithTimeout(upReq.url, { method: 'POST', headers: upReq.headers, body: upReq.body }, env);
+    } catch (e) {
+      logError('/api/chat', provider, model, 504, e.name === 'AbortError' ? 'upstream timeout' : e.message);
+      return new Response(JSON.stringify({ error: { message: e.name === 'AbortError' ? '上游响应超时' : e.message, type: 'upstream_error', provider } }),
+        { status: 504, headers: corsHeaders(env) });
+    }
 
     if (!upRes.ok) {
       const errText = await upRes.text();
-      let msg = errText;
-      try { msg = JSON.parse(errText)?.error?.message || errText; } catch {}
-      return new Response(JSON.stringify({ error: { message: msg, type: 'upstream_error', provider } }),
+      logError('/api/chat', provider, model, upRes.status, sanitizeUpstreamError(errText));
+      return new Response(JSON.stringify({ error: { message: sanitizeUpstreamError(errText), type: 'upstream_error', provider } }),
         { status: upRes.status, headers: corsHeaders(env) });
     }
 
@@ -89,6 +104,7 @@ export default async function onRequest(context) {
     }), { headers: corsHeaders(env) });
 
   } catch (e) {
+    logError('/api/chat', null, null, 500, e.message);
     return new Response(JSON.stringify({ error: { message: e.message, type: 'server_error' } }),
       { status: 500, headers: corsHeaders(env) });
   }

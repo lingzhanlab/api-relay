@@ -1,6 +1,6 @@
-# AI API 中转站
+# API 中转站
 
-一键部署到 EdgeOne Pages 的免费 AI API 中转站。支持 OpenAI / Gemini / Claude，解决**跨境访问 + Key 隐藏 + CORS 跨域**，附带多轮对话与流式输出。
+一键部署到 EdgeOne Pages 的免费 AI API 中转站。支持 OpenAI / Gemini / Claude/ 自定义，解决**跨境访问 + Key 隐藏 + CORS 跨域**，附带多轮对话与流式输出。
 
 ## 快速开始
 
@@ -17,51 +17,61 @@
 
 | 变量名 | 必填 | 说明 | 示例 |
 |--------|------|------|------|
-| `ACCESS_TOKEN` | ✅ | 访问密钥，外部 API 调用必须带此 token | `my-random-secret-2026` |
+| `ACCESS_TOKEN` | ⬜ | API 端点访问密钥（/v1/chat/completions），不设则 API 不强制鉴权 | `sk-relay-xxxx` |
 | `OPENAI_API_KEY` | ⬜ | OpenAI API Key | `sk-proj-xxxx` |
 | `GEMINI_API_KEY` | ⬜ | Google Gemini API Key | `AIzaSyDxxxx` |
 | `CLAUDE_API_KEY` | ⬜ | Anthropic Claude API Key | `sk-ant-api03-xxxx` |
 | `ALLOWED_ORIGIN` | ⬜ | CORS 允许的域名 | `https://your-site.com` |
 | `DEFAULT_PROVIDER` | ⬜ | 默认供应商 | `openai` |
-| `ENABLE_CHAT_PAGE` | ⬜ | 设为 `false` 关闭浏览器聊天页 | `true` |
+| `ENABLE_CHAT_PAGE` | ⬜ | 设为 `true` 才开放浏览器聊天页（默认关闭） | `true` |
 | `CUSTOM_PROVIDERS` | ⬜ | 自定义供应商 JSON | 见下方 |
 | `MODEL_OVERRIDES` | ⬜ | 覆盖默认模型 JSON | `{"openai":"gpt-4o"}` |
 | `MAX_TOKENS` | ⬜ | 单次回复最大 token 数（仅 Claude 生效，默认 4096） | `8192` |
 
 ### 3. 使用
 
-**浏览器聊天页**：`https://你的域名.edgeone.app`（自带多轮对话 + 流式逐字显示，无需配置 token）
+**浏览器聊天页**：`https://你的域名.edgeone.dev`（自带多轮对话 + 流式逐字显示）
+
+> ⚠️ 聊天页**默认关闭**，需设置环境变量 `ENABLE_CHAT_PAGE=true` 才开放。未开启时访问域名只会看到「仅 API 模式」提示，不暴露任何信息。
 
 **代码调用（非流式）**：
 ```bash
-curl -X POST https://你的域名.edgeone.app/api/chat \
+curl -X POST https://你的域名.edgeone.dev/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "X-API-Token: 你设的ACCESS_TOKEN" \
-  -d '{"provider":"openai","messages":[{"role":"user","content":"你好"}]}'
+  -H "Authorization: Bearer 你设的ACCESS_TOKEN" \
+  -d '{"model":"gpt-4o","messages":[{"role":"user","content":"你好"}]}'
 ```
 
-**代码调用（流式）**：
+**代码调用（流式，OpenAI 兼容 SSE）**：
 ```bash
-curl -X POST https://你的域名.edgeone.app/api/chat \
+curl -X POST https://你的域名.edgeone.dev/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "X-API-Token: 你设的ACCESS_TOKEN" \
-  -d '{"provider":"openai","messages":[{"role":"user","content":"讲个故事"}],"stream":true}'
-# 返回 text/plain 纯文本流，逐字输出
+  -H "Authorization: Bearer 你设的ACCESS_TOKEN" \
+  -d '{"model":"gpt-4o","messages":[{"role":"user","content":"讲个故事"}],"stream":true}'
+# 返回 OpenAI 兼容 SSE 流，第三方客户端直接接入
 ```
 
-**客户端接入（LobeChat / ChatBox / OpenWebUI 等）**：
-- API 地址：`https://你的域名.edgeone.app`
+**客户端接入（LobeChat / ChatBox / OpenWebUI 等，OpenAI 兼容）**：
+- API 地址：`https://你的域名.edgeone.dev`
 - API Key：填 `ACCESS_TOKEN` 的值
 - 模型选 `gpt-3.5-turbo` / `gemini-2.0-flash` / `claude-3-haiku-20240307` 或你设的默认模型
 - 自动支持 `stream: true`，返回 OpenAI 兼容 SSE 流
 
+**Anthropic SDK / Claude 客户端接入**：
+- base_url：`https://你的域名.edgeone.dev`
+- API Key：填 `ACCESS_TOKEN` 的值（SDK 会以 `x-api-key` header 发送，已兼容）
+- 模型填 `claude-3-haiku-20240307` 等，或 `gpt-4o` / `gemini-2.0-flash`（自动路由到对应供应商）
+- 入参用 Anthropic 格式（`system` 顶层字段、`max_tokens` 等），输出统一成 Anthropic 格式
+- 支持 `stream: true`，返回 Anthropic SSE 事件流（`message_start` → `content_block_delta` → `message_stop`）
+
 ## API 端点
 
-| 端点 | 说明 | 流式 |
-|------|------|------|
-| `POST /api/chat` | 多供应商聊天接口（自定义格式） | `stream:true` → `text/plain` 纯文本流 |
-| `GET /api/config` | 前端配置接口（供应商列表） | — |
-| `POST /v1/chat/completions` | OpenAI 兼容格式 | `stream:true` → `text/event-stream` SSE |
+| 端点 | 说明 | 鉴权 | 流式 |
+|------|------|------|------|
+| `GET /api/config` | 前端配置接口（聊天页开放时返回供应商列表） | 无 | — |
+| `POST /api/chat` | 聊天页专用（需 `ENABLE_CHAT_PAGE=true`） | 无 | `stream:true` → `text/plain` 纯文本流 |
+| `POST /v1/chat/completions` | OpenAI 兼容格式（主接口） | `ACCESS_TOKEN` | `stream:true` → `text/event-stream` SSE |
+| `POST /v1/messages` | Anthropic 兼容格式（Claude 客户端接入） | `ACCESS_TOKEN` | `stream:true` → Anthropic SSE 事件流 |
 
 ## 多轮对话
 
@@ -146,13 +156,12 @@ SSE 事件顺序遵循 OpenAI 规范：`delta... → finish → usage → [DONE]
 
 ## 安全说明
 
-- API Key 存储在 EdgeOne 环境变量中，不出现在 GitHub 代码里
-- 鉴权策略：
-  - 浏览器同源访问自带聊天页 → 自动放行（靠 `Origin` 头判断同源）
-  - 外部 API 调用 → 必须带 `Authorization: Bearer <token>` 或 `X-API-Token: <token>`
-  - 未设 `ACCESS_TOKEN` → 不强制鉴权（仅建议开发期使用，生产环境务必设置）
+- API Key 存储在 EdgeOne 环境变量中
+- **`/api/config` 不返回任何密钥**，未开启聊天页时连供应商列表都不返回
+- **聊天页默认关闭**：不设 `ENABLE_CHAT_PAGE=true` 时，访问域名只显示「仅 API 模式」，`/api/chat` 接口也返回 403
+- **API 端点鉴权**：设了 `ACCESS_TOKEN` 则 `/v1/chat/completions` 必须带 `Authorization: Bearer` 或 `X-API-Token`；不设则不强制（生产环境务必设置）
+- 聊天页开放时不鉴权（信任域名不公开），如需更高安全性请关闭聊天页只走 API
 - 建议设 `ALLOWED_ORIGIN` 锁定 CORS
-- 生产环境建议设 `ENABLE_CHAT_PAGE=false` 关闭浏览器聊天页（关闭后同源放行也失效，所有调用都需 token）
 
 ## 限制
 
@@ -161,4 +170,4 @@ SSE 事件顺序遵循 OpenAI 规范：`delta... → finish → usage → [DONE]
 
 ## License
 
-MIT · 基于 [0Lab.cl](https://0l.cl)
+MIT License

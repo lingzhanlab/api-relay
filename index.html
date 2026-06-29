@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AI API 中转站 · 0L.cl</title>
+  <title>API 中转站 · lingzhanlab·0L.CL</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root { --accent: #00d4ff; --bg: #000; --panel: #111; --border: #333; --muted: #888; }
@@ -48,8 +48,8 @@
 <body>
   <div class="container">
     <header>
-      <h1>AI API <span>中转站</span></h1>
-      <p class="sub">Key 存在 EdgeOne 环境变量，前端零暴露 · 支持流式多轮</p>
+      <h1>API <span>中转站</span></h1>
+      <p class="sub">Key 请在 EdgeOne 环境变量中设置</p>
       <div id="status">正在加载配置...</div>
     </header>
 
@@ -66,7 +66,7 @@
     </div>
 
     <div class="footer">
-      基于 <a href="https://0l.cl" target="_blank">0L.cl</a>
+       <a href="https://0l.cl" target="_blank">0L.cl</a>
     </div>
   </div>
 
@@ -81,29 +81,40 @@
       const status = $('status');
       try {
         const res = await fetch('/api/config');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         config = await res.json();
-
-        if (!config.chatEnabled) {
-          document.body.innerHTML = `<div style="text-align:center;padding:60px 20px;color:#888"><h2 style="color:#00d4ff;margin-bottom:12px">🔌 API 模式</h2><p>聊天页面已关闭，仅开放 API 接口。</p><p style="font-size:13px;margin-top:8px">使用 <code style="background:#111;padding:2px 6px;border-radius:4px">POST /api/chat</code> 或 <code style="background:#111;padding:2px 6px;border-radius:4px">POST /v1/chat/completions</code></p></div>`;
-          return;
-        }
-
-        renderProviders(config.providers);
-        const okCount = config.providers.filter(p => p.hasKey).length;
-        status.textContent = `已加载 ${okCount}/${config.providers.length} 个供应商 · 默认 ${config.defaultProvider}`;
-        $('send').disabled = false;
+        onConfigReady();
       } catch (e) {
         status.textContent = '⚠️ 加载配置失败，请检查部署';
         status.className = 'error';
       }
     }
 
+    function onConfigReady() {
+      if (!config.chatEnabled) {
+        document.body.innerHTML = `<div style="text-align:center;padding:60px 20px;color:#888"><h2 style="color:#00d4ff;margin-bottom:12px">🔌 仅 API 模式</h2><p>聊天页未启用，仅开放 API 接口。</p><p style="font-size:13px;margin-top:8px">使用 <code style="background:#111;padding:2px 6px;border-radius:4px">POST /v1/chat/completions</code></p><p style="font-size:12px;margin-top:16px;color:#555">如需开启聊天页，请设置环境变量 <code style="background:#111;padding:2px 6px;border-radius:4px">ENABLE_CHAT_PAGE=true</code></p></div>`;
+        return;
+      }
+      renderProviders(config.providers);
+      const okCount = config.providers.filter(p => p.hasKey).length;
+      if (okCount === 0) {
+        $('status').textContent = '⚠️ 未配置任何 API Key';
+        $('status').className = 'error';
+        $('send').disabled = true;
+        $('history').innerHTML = '<div class="empty" style="color:#f44">未配置任何 API Key，请在 EdgeOne 环境变量设置 OPENAI_API_KEY / GEMINI_API_KEY / CLAUDE_API_KEY</div>';
+        return;
+      }
+      $('status').textContent = `已加载 ${okCount}/${config.providers.length} 个供应商 · 默认 ${config.defaultProvider}`;
+      $('send').disabled = false;
+    }
+
     function renderProviders(providers) {
       const container = $('providers');
+      const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
       container.innerHTML = providers.map((p, i) =>
         `<button class="${i === 0 ? 'active' : ''} ${p.hasKey ? '' : 'offline'}"
-                 data-provider="${p.id}"
-                 ${p.hasKey ? '' : 'disabled title="未配置 API Key"'}>${p.id.toUpperCase()}</button>`
+                 data-provider="${esc(p.id)}"
+                 ${p.hasKey ? '' : 'disabled title="未配置 API Key"'}>${esc(p.id.toUpperCase())}</button>`
       ).join('');
 
       const first = providers.find(p => p.hasKey);
@@ -161,7 +172,6 @@
       bodyEl.textContent = '';
 
       try {
-        // 同源请求，后端 checkAuth 放行；无需带 token
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -173,7 +183,6 @@
           bodyEl.classList.remove('cursor');
           bodyEl.className = 'err';
           bodyEl.textContent = '❌ ' + (err.error?.message || res.status);
-          // 失败的 user 消息回滚，避免上下文污染
           messages.pop();
           return;
         }
@@ -181,13 +190,27 @@
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let full = '';
+        let watchdog;
+        const resetWatchdog = () => {
+          clearTimeout(watchdog);
+          watchdog = setTimeout(() => {
+            reader.cancel().catch(() => {});
+            bodyEl.classList.remove('cursor');
+            bodyEl.className = 'err';
+            bodyEl.textContent = (full || '') + '\n\n⚠️ 响应超时（30s 无数据）';
+            if (!full) messages.pop();
+          }, 30000);
+        };
+        resetWatchdog();
         while (true) {
           const { done, value } = await reader.read();
+          resetWatchdog();
           if (done) break;
           full += decoder.decode(value, { stream: true });
           bodyEl.textContent = full;
           scrollToBottom();
         }
+        clearTimeout(watchdog);
         bodyEl.classList.remove('cursor');
         if (full) {
           messages.push({ role: 'assistant', content: full });
@@ -213,7 +236,6 @@
       history.innerHTML = '<div class="empty" id="emptyHint">输入问题开始对话 · Enter 发送 / Shift+Enter 换行</div>';
     }
 
-    // Enter 发送 / Shift+Enter 换行
     $('prompt').addEventListener('keydown', e => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();

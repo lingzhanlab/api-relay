@@ -2,11 +2,42 @@
 // 第三方客户端（LobeChat / ChatBox / OpenWebUI 等）填这个地址即可当 OpenAI API 用
 // model 参数映射: gpt-*/o* → openai, gemini-* → gemini, claude-* → claude, 其余按供应商 id 模糊匹配
 import {
-  getAllProviders, resolveApiKey, resolveProvider,
+  getAllProviders, resolveApiKey,
   corsHeaders, handlePreflight, checkAuth,
   buildUpstreamRequest, parseUpstreamResponse, parseUpstreamUsage,
-  createRelayStream, sanitizeUpstreamError, fetchWithTimeout, validateMessages, logError,
+  createRelayStream,
 } from '../../_shared.js';
+
+// 模型名 → 供应商
+// 顺序: 自定义供应商精确/前缀匹配 → 内置正则 → 自定义模糊匹配兜底 → 默认
+// 这样自定义 id 含 openai/gemini/claude 子串时不会被内置正则抢匹配
+function resolveProvider(model, env) {
+  const all = getAllProviders(env);
+  const isBuiltin = id => id === 'openai' || id === 'gemini' || id === 'claude';
+  const customs = Object.entries(all).filter(([id]) => !isBuiltin(id));
+
+  if (!model) {
+    const def = env.DEFAULT_PROVIDER || 'openai';
+    return all[def] ? { provider: def, cfg: all[def] } : null;
+  }
+  const m = String(model);
+  const ml = m.toLowerCase();
+
+  // 1. 自定义供应商: 精确匹配 id 或前缀 id-（最高优先级，避免与内置正则冲突）
+  for (const [id, cfg] of customs) {
+    if (m === id || ml.startsWith(id.toLowerCase() + '-')) return { provider: id, cfg };
+  }
+  // 2. 内置供应商: 按模型名特征匹配
+  if (/^gpt/i.test(m) || /^o\d/i.test(m)) return all.openai ? { provider: 'openai', cfg: all.openai } : null;
+  if (/gemini/i.test(m))                  return all.gemini ? { provider: 'gemini', cfg: all.gemini } : null;
+  if (/claude/i.test(m))                  return all.claude ? { provider: 'claude', cfg: all.claude } : null;
+  // 3. 兜底: 自定义供应商模糊匹配（模型名包含 id）
+  for (const [id, cfg] of customs) {
+    if (ml.includes(id.toLowerCase())) return { provider: id, cfg };
+  }
+  const def = env.DEFAULT_PROVIDER || 'openai';
+  return all[def] ? { provider: def, cfg: all[def] } : null;
+}
 
 export default async function onRequest(context) {
   const { env, request } = context;
@@ -31,12 +62,6 @@ export default async function onRequest(context) {
         { status: 400, headers: corsHeaders(env) });
     }
 
-    const validErr = validateMessages(messages);
-    if (validErr) {
-      return new Response(JSON.stringify({ error: { message: validErr, type: 'invalid_request_error' } }),
-        { status: 400, headers: corsHeaders(env) });
-    }
-
     const resolved = resolveProvider(model, env);
     if (!resolved) {
       return new Response(JSON.stringify({ error: { message: '无可用供应商', type: 'server_error' } }),
@@ -51,19 +76,13 @@ export default async function onRequest(context) {
     }
 
     const upReq = buildUpstreamRequest(cfg, messages, model, apiKey, env, { stream });
-    let upRes;
-    try {
-      upRes = await fetchWithTimeout(upReq.url, { method: 'POST', headers: upReq.headers, body: upReq.body }, env);
-    } catch (e) {
-      logError('/v1/chat/completions', provider, model, 504, e.name === 'AbortError' ? 'upstream timeout' : e.message);
-      return new Response(JSON.stringify({ error: { message: e.name === 'AbortError' ? '上游响应超时' : e.message, type: 'upstream_error' } }),
-        { status: 504, headers: corsHeaders(env) });
-    }
+    const upRes = await fetch(upReq.url, { method: 'POST', headers: upReq.headers, body: upReq.body });
 
     if (!upRes.ok) {
       const errText = await upRes.text();
-      logError('/v1/chat/completions', provider, model, upRes.status, sanitizeUpstreamError(errText));
-      return new Response(JSON.stringify({ error: { message: sanitizeUpstreamError(errText), type: 'upstream_error' } }),
+      let msg = errText;
+      try { msg = JSON.parse(errText)?.error?.message || errText; } catch {}
+      return new Response(JSON.stringify({ error: { message: msg, type: 'upstream_error' } }),
         { status: upRes.status, headers: corsHeaders(env) });
     }
 
@@ -93,7 +112,6 @@ export default async function onRequest(context) {
     }), { headers: corsHeaders(env) });
 
   } catch (e) {
-    logError('/v1/chat/completions', null, null, 500, e.message);
     return new Response(JSON.stringify({ error: { message: e.message, type: 'server_error' } }),
       { status: 500, headers: corsHeaders(env) });
   }
