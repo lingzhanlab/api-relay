@@ -5,7 +5,8 @@ import {
   getAllProviders, resolveApiKey, resolveProvider,
   corsHeaders, handlePreflight, checkAuth,
   buildUpstreamRequest, parseUpstreamResponse, parseUpstreamUsage,
-  createRelayStream, sanitizeUpstreamError, fetchWithTimeout, validateMessages, logError,
+  sanitizeUpstreamError, fetchWithTimeout, validateMessages, logError,
+  openaiSSEChunk, SSE_DONE,
 } from '../../_shared.js';
 
 export default async function onRequest(context) {
@@ -50,7 +51,8 @@ export default async function onRequest(context) {
         { status: 500, headers: corsHeaders(env) });
     }
 
-    const upReq = buildUpstreamRequest(cfg, messages, model, apiKey, env, { stream });
+    // 上游强制非流式（EdgeOne ReadableStream 流式待验证，临时回退）
+    const upReq = buildUpstreamRequest(cfg, messages, model, apiKey, env, { stream: false });
     let upRes;
     try {
       upRes = await fetchWithTimeout(upReq.url, { method: 'POST', headers: upReq.headers, body: upReq.body }, env);
@@ -67,9 +69,19 @@ export default async function onRequest(context) {
         { status: upRes.status, headers: corsHeaders(env) });
     }
 
+    const data = await upRes.json();
+    const content = parseUpstreamResponse(data, cfg.format);
+    const usage = parseUpstreamUsage(data, cfg.format) || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+
     if (stream) {
-      // OpenAI 兼容 SSE 流
-      return new Response(createRelayStream(upRes.body, cfg.format, model || cfg.model), {
+      // 客户端要流式 → 把完整响应包装成单 chunk SSE（兼容客户端 stream 协议）
+      const id = `chatcmpl-relay-${Date.now()}`;
+      const sseBody =
+        openaiSSEChunk(id, model || cfg.model, content) +
+        openaiSSEChunk(id, model || cfg.model, '', { finish_reason: 'stop' }) +
+        openaiSSEChunk(id, model || cfg.model, '', { usage }) +
+        SSE_DONE;
+      return new Response(sseBody, {
         headers: {
           ...corsHeaders(env),
           'Content-Type': 'text/event-stream; charset=utf-8',
@@ -78,10 +90,6 @@ export default async function onRequest(context) {
         },
       });
     }
-
-    const data = await upRes.json();
-    const content = parseUpstreamResponse(data, cfg.format);
-    const usage = parseUpstreamUsage(data, cfg.format) || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
 
     return new Response(JSON.stringify({
       id: `chatcmpl-relay-${Date.now()}`,

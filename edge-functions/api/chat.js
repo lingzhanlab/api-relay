@@ -6,7 +6,7 @@ import {
   getAllProviders, parseModelOverrides, resolveApiKey,
   corsHeaders, handlePreflight,
   buildUpstreamRequest, parseUpstreamResponse, parseUpstreamUsage,
-  createTextStream, sanitizeUpstreamError, fetchWithTimeout, validateMessages, logError,
+  sanitizeUpstreamError, fetchWithTimeout, validateMessages, logError,
 } from '../_shared.js';
 
 export default async function onRequest(context) {
@@ -67,7 +67,8 @@ export default async function onRequest(context) {
         { status: 500, headers: corsHeaders(env) });
     }
 
-    const upReq = buildUpstreamRequest(cfg, messages, model, apiKey, env, { stream });
+    // 上游强制非流式（EdgeOne ReadableStream 流式待验证，临时回退）
+    const upReq = buildUpstreamRequest(cfg, messages, model, apiKey, env, { stream: false });
     let upRes;
     try {
       upRes = await fetchWithTimeout(upReq.url, { method: 'POST', headers: upReq.headers, body: upReq.body }, env);
@@ -84,9 +85,13 @@ export default async function onRequest(context) {
         { status: upRes.status, headers: corsHeaders(env) });
     }
 
+    const data = await upRes.json();
+    const content = parseUpstreamResponse(data, cfg.format);
+    const usage = parseUpstreamUsage(data, cfg.format);
+
     if (stream) {
-      // 纯文本流：前端 reader 读 UTF-8 chunk 逐字 append
-      return new Response(createTextStream(upRes.body, cfg.format), {
+      // 客户端要流式 → 返回纯文本（一次性，前端能正常显示）
+      return new Response(content, {
         headers: {
           ...corsHeaders(env),
           'Content-Type': 'text/plain; charset=utf-8',
@@ -95,12 +100,11 @@ export default async function onRequest(context) {
       });
     }
 
-    const data = await upRes.json();
     return new Response(JSON.stringify({
       provider,
       model,
-      content: parseUpstreamResponse(data, cfg.format),
-      usage: parseUpstreamUsage(data, cfg.format),
+      content,
+      usage,
     }), { headers: corsHeaders(env) });
 
   } catch (e) {

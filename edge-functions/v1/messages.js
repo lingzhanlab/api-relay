@@ -11,7 +11,7 @@ import {
   getAllProviders, resolveApiKey, resolveProvider,
   corsHeaders, handlePreflight, checkAuth,
   buildUpstreamRequest, parseUpstreamResponse, parseUpstreamUsage,
-  toAnthropicResponse, createAnthropicStream, sanitizeUpstreamError, fetchWithTimeout, validateMessages, logError,
+  toAnthropicResponse, sanitizeUpstreamError, fetchWithTimeout, validateMessages, logError,
 } from '../../_shared.js';
 
 export default async function onRequest(context) {
@@ -83,7 +83,8 @@ export default async function onRequest(context) {
     const maxTokRaw = parseInt(max_tokens, 10);
     const envWithMax = Number.isFinite(maxTokRaw) && maxTokRaw > 0 ? { ...env, MAX_TOKENS: String(maxTokRaw) } : env;
 
-    const upReq = buildUpstreamRequest(cfg, messages, model, apiKey, envWithMax, { stream });
+    // 上游强制非流式（EdgeOne ReadableStream 流式待验证，临时回退）
+    const upReq = buildUpstreamRequest(cfg, messages, model, apiKey, envWithMax, { stream: false });
     let upRes;
     try {
       upRes = await fetchWithTimeout(upReq.url, { method: 'POST', headers: upReq.headers, body: upReq.body }, env);
@@ -100,8 +101,23 @@ export default async function onRequest(context) {
         { status: upRes.status, headers: corsHeaders(env) });
     }
 
+    const data = await upRes.json();
+    const content = parseUpstreamResponse(data, cfg.format);
+    const usage = parseUpstreamUsage(data, cfg.format);
+
     if (stream) {
-      return new Response(createAnthropicStream(upRes.body, cfg.format, model || cfg.model, inputUsageEst), {
+      // 客户端要流式 → 把完整响应包装成 Anthropic SSE 事件序列
+      const msgId = `msg_relay_${Date.now()}`;
+      const sse = (event, d) => `event: ${event}\ndata: ${JSON.stringify(d)}\n\n`;
+      const resp = toAnthropicResponse(content, usage, model || cfg.model);
+      const sseBody =
+        sse('message_start', { type: 'message_start', message: { ...resp, content: [] } }) +
+        sse('content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }) +
+        sse('content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: content || '' } }) +
+        sse('content_block_stop', { type: 'content_block_stop', index: 0 }) +
+        sse('message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: resp.usage.output_tokens } }) +
+        sse('message_stop', { type: 'message_stop' });
+      return new Response(sseBody, {
         headers: {
           ...corsHeaders(env),
           'Content-Type': 'text/event-stream; charset=utf-8',
@@ -110,10 +126,6 @@ export default async function onRequest(context) {
         },
       });
     }
-
-    const data = await upRes.json();
-    const content = parseUpstreamResponse(data, cfg.format);
-    const usage = parseUpstreamUsage(data, cfg.format);
 
     return new Response(JSON.stringify(toAnthropicResponse(content, usage, model || cfg.model)),
       { headers: corsHeaders(env) });
