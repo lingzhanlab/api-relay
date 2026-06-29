@@ -15,20 +15,20 @@
 
 在 EdgeOne (https://console.tencentcloud.com/edgeone/zones) 后台 → Makers → project → project setting → Environment Variables：
 
-| 变量名 | 必填 | 说明 | 示例 |
-|--------|------|------|------|
-| `ACCESS_TOKEN` | ⬜ | API 端点访问密钥，不设则 API 不强制鉴权 | `sk-relay-xxxx` |
-| `OPENAI_API_KEY` | ⬜ | OpenAI API Key | `sk-proj-xxxx` |
-| `GEMINI_API_KEY` | ⬜ | Google Gemini API Key | `AIzaSyDxxxx` |
-| `CLAUDE_API_KEY` | ⬜ | Anthropic Claude API Key | `sk-ant-api03-xxxx` |
-| `CUSTOM_PROVIDERS` | ⬜ | 自定义供应商 JSON 数组 | 见下方 |
-| `DEEPSEEK_API_KEY` | ⬜ | DeepSeek API Key（自定义供应商示例） | `sk-d30fxxxx` |
-| `ALLOWED_ORIGIN` | ⬜ | CORS 允许的域名，不设则 `*` | `https://your-site.com` |
-| `DEFAULT_PROVIDER` | ⬜ | 默认供应商，默认 `openai` | `deepseek` |
-| `ENABLE_CHAT_PAGE` | ⬜ | 设为 `true` 才开放浏览器聊天页（默认关闭） | `true` |
-| `MODEL_OVERRIDES` | ⬜ | 覆盖默认模型 JSON | `{"openai":"gpt-4o"}` |
-| `MAX_TOKENS` | ⬜ | 单次回复最大 token 数（仅 Claude 生效，默认 4096） | `8192` |
-| `UPSTREAM_TIMEOUT` | ⬜ | 上游请求超时毫秒数，默认 25000 | `30000` |
+| 变量名 | 说明 | 示例 |
+|--------|------|------|
+| `ACCESS_TOKEN` | API 端点访问密钥，不设则 API 不强制鉴权 | `sk-relay-xxxx` |
+| `OPENAI_API_KEY` |  OpenAI API Key | `sk-proj-xxxx` |
+| `GEMINI_API_KEY` |  Google Gemini API Key | `AIzaSyDxxxx` |
+| `CLAUDE_API_KEY` |  Anthropic Claude API Key | `sk-ant-api03-xxxx` |
+| `CUSTOM_PROVIDERS` |  自定义供应商 JSON 数组 | 见下方 |
+| `DEEPSEEK_API_KEY` |  DeepSeek API Key（自定义供应商示例） | `sk-d30fxxxx` |
+| `ALLOWED_ORIGIN` |  CORS 允许的域名，不设则 `*` | `https://your-site.com` |
+| `DEFAULT_PROVIDER` |  默认供应商，默认 `openai` | `deepseek` |
+| `ENABLE_CHAT_PAGE` |  设为 `true` 才开放浏览器聊天页（默认关闭） | `true` |
+| `MODEL_OVERRIDES` |  覆盖默认模型 JSON | `{"openai":"gpt-4o"}` |
+| `MAX_TOKENS` |  单次回复最大 token 数（仅 Claude 生效，默认 4096） | `8192` |
+| `UPSTREAM_TIMEOUT` |  上游请求超时毫秒数，默认 25000 | `30000` |
 
 ### 3. 使用
 
