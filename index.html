@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>AI API 中转站 · 0L.Cl</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Inter, system-ui, sans-serif; background: #000; color: #fff; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
+    .container { max-width: 600px; width: 90%; padding: 30px; }
+    h1 { font-size: 24px; margin-bottom: 8px; }
+    h1 span { color: #00d4ff; }
+    .sub { color: #888; font-size: 14px; margin-bottom: 24px; }
+    .providers { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .providers button { padding: 8px 16px; border: 1px solid #333; background: #111; color: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all .2s; }
+    .providers button:hover { border-color: #00d4ff; }
+    .providers button.active { background: #00d4ff; color: #000; border-color: #00d4ff; font-weight: 600; }
+    textarea { width: 100%; height: 100px; padding: 12px; font-size: 15px; background: #111; border: 1px solid #333; border-radius: 8px; color: #fff; resize: vertical; margin-bottom: 12px; }
+    #send { width: 100%; padding: 12px; background: #00d4ff; color: #000; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: opacity .2s; }
+    #send:hover { opacity: .85; }
+    #send:disabled { opacity: .4; cursor: not-allowed; }
+    #result { margin-top: 20px; padding: 16px; background: #111; border: 1px solid #333; border-radius: 8px; min-height: 60px; white-space: pre-wrap; line-height: 1.6; font-size: 14px; }
+    #result .label { color: #00d4ff; font-size: 12px; margin-bottom: 8px; }
+    .footer { text-align: center; margin-top: 20px; color: #555; font-size: 12px; }
+    .footer a { color: #00d4ff; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>AI API <span>中转站</span></h1>
+    <p class="sub">选择 AI 供应商，Key 存在 EdgeOne 环境变量里</p>
+
+    <div class="providers">
+      <button class="active" data-provider="openai">OpenAI</button>
+      <button data-provider="gemini">Gemini</button>
+      <button data-provider="claude">Claude</button>
+    </div>
+
+    <textarea id="prompt" placeholder="输入你的问题...">用三句话解释量子力学</textarea>
+    <button id="send" onclick="ask()">发送请求</button>
+
+    <div id="result"></div>
+
+  </div>
+
+  <script>
+    let provider = 'openai';
+    document.querySelectorAll('.providers button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.providers button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        provider = btn.dataset.provider;
+      });
+    });
+
+    async function ask() {
+      const result = document.getElementById('result');
+      const send = document.getElementById('send');
+      const prompt = document.getElementById('prompt').value.trim();
+      if (!prompt) return;
+
+      result.innerHTML = '<span style="color:#888">⏳ 请求中...</span>';
+      send.disabled = true;
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, prompt })
+        });
+        const data = await res.json();
+        result.innerHTML = `<div class="label">${provider.toUpperCase()} 回复</div>${data.content || data.error || JSON.stringify(data)}`;
+      } catch (e) {
+        result.innerHTML = `<span style="color:#f44">❌ ${e.message}</span>`;
+      } finally {
+        send.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
