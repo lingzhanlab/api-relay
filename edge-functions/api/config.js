@@ -9,7 +9,7 @@ export default async function onRequest(context) {
   const preflight = handlePreflight(env, request, 'GET, OPTIONS');
   if (preflight) return preflight;
 
-  // 聊天页默认关闭：未显式设 ENABLE_CHAT_PAGE=true → 不暴露供应商列表
+  // 聊天页默认关闭：未显式设 ENABLE_CHAT_PAGE=true
   const chatEnabled = env.ENABLE_CHAT_PAGE === 'true';
   if (!chatEnabled) {
     return new Response(JSON.stringify({
@@ -19,7 +19,7 @@ export default async function onRequest(context) {
     }), { headers: corsHeaders(env) });
   }
 
-  // 聊天页开放：返回供应商列表（不鉴权，信任域名不公开）
+  // 聊天页开放：返回供应商列表
   const all = getAllProviders(env);
   const providers = Object.entries(all).map(([id, cfg]) => ({
     id,
