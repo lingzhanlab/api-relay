@@ -13,7 +13,7 @@
 
 ### 2. 配置环境变量
 
-在 EdgeOne Pages 后台 → Settings → Environment Variables：
+在 EdgeOne Pages 后台 → Makers → project → project setting：
 
 | 变量名 | 必填 | 说明 | 示例 |
 |--------|------|------|------|
