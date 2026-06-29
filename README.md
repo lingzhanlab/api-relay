@@ -52,13 +52,17 @@ curl -X POST https://你的域名.edgeone.dev/v1/chat/completions \
 ```
 
 **客户端接入（LobeChat / ChatBox / OpenWebUI 等，OpenAI 兼容）**：
-- API 地址：`https://你的域名.edgeone.dev`
+- API 地址：`https://你的域名.edgeone.dev`（**只填到域名根，不带 `/v1`**）
+  - 客户端会自动拼 `/v1/chat/completions`，填了 `/v1` 会变成 `/v1/v1/chat/completions` 导致 404
 - API Key：填 `ACCESS_TOKEN` 的值
 - 模型选 `gpt-3.5-turbo` / `gemini-2.0-flash` / `claude-3-haiku-20240307` 或你设的默认模型
 - 自动支持 `stream: true`，返回 OpenAI 兼容 SSE 流
 
+> 💡 如果你的客户端不自动补全路径（要求填完整 URL），则填 `https://你的域名.edgeone.dev/v1/chat/completions`
+
 **Anthropic SDK / Claude 客户端接入**：
-- base_url：`https://你的域名.edgeone.dev`
+- base_url：`https://你的域名.edgeone.dev`（**只填到域名根，不带 `/v1`**）
+  - SDK 会自动拼 `/v1/messages`，填了 `/v1` 会变成 `/v1/v1/messages` 导致 404
 - API Key：填 `ACCESS_TOKEN` 的值（SDK 会以 `x-api-key` header 发送，已兼容）
 - 模型填 `claude-3-haiku-20240307` 等，或 `gpt-4o` / `gemini-2.0-flash`（自动路由到对应供应商）
 - 入参用 Anthropic 格式（`system` 顶层字段、`max_tokens` 等），输出统一成 Anthropic 格式

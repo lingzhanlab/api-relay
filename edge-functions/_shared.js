@@ -186,7 +186,8 @@ export function resolveProvider(model, env) {
 }
 
 // 上游请求超时（ms）。EdgeOne Edge Function 总时限 ~30s，留 5s 余量做收尾。
-export const UPSTREAM_TIMEOUT = parseInt(process?.env?.UPSTREAM_TIMEOUT, 10) || 25000;
+// EdgeOne 无 Node.js process 全局，用 typeof 安全检测；超时由 env.UPSTREAM_TIMEOUT 覆盖。
+export const UPSTREAM_TIMEOUT = 25000;
 
 // 带 AbortController 的 fetch：超时自动中断，释放 Edge Function 执行槽位。
 // 用法: const res = await fetchWithTimeout(url, { method, headers, body }, env);
