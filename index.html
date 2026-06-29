@@ -2,79 +2,226 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <title>AI API 中转站 · 0L.Cl</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI API 中转站 · 0L.cl</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Inter, system-ui, sans-serif; background: #000; color: #fff; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
-    .container { max-width: 600px; width: 90%; padding: 30px; }
-    h1 { font-size: 24px; margin-bottom: 8px; }
-    h1 span { color: #00d4ff; }
-    .sub { color: #888; font-size: 14px; margin-bottom: 24px; }
-    .providers { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-    .providers button { padding: 8px 16px; border: 1px solid #333; background: #111; color: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all .2s; }
-    .providers button:hover { border-color: #00d4ff; }
-    .providers button.active { background: #00d4ff; color: #000; border-color: #00d4ff; font-weight: 600; }
-    textarea { width: 100%; height: 100px; padding: 12px; font-size: 15px; background: #111; border: 1px solid #333; border-radius: 8px; color: #fff; resize: vertical; margin-bottom: 12px; }
-    #send { width: 100%; padding: 12px; background: #00d4ff; color: #000; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: opacity .2s; }
-    #send:hover { opacity: .85; }
-    #send:disabled { opacity: .4; cursor: not-allowed; }
-    #result { margin-top: 20px; padding: 16px; background: #111; border: 1px solid #333; border-radius: 8px; min-height: 60px; white-space: pre-wrap; line-height: 1.6; font-size: 14px; }
-    #result .label { color: #00d4ff; font-size: 12px; margin-bottom: 8px; }
-    .footer { text-align: center; margin-top: 20px; color: #555; font-size: 12px; }
-    .footer a { color: #00d4ff; text-decoration: none; }
+    :root { --accent: #00d4ff; --bg: #000; --panel: #111; --border: #333; --muted: #888; }
+    body { font-family: Inter, system-ui, -apple-system, sans-serif; background: var(--bg); color: #fff; min-height: 100vh; display: flex; justify-content: center; }
+    .container { max-width: 720px; width: 100%; min-height: 100vh; display: flex; flex-direction: column; padding: 20px; }
+
+    header h1 { font-size: 22px; font-weight: 600; }
+    header h1 span { color: var(--accent); }
+    header .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    #status { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    #status.error { color: #f44; }
+
+    .providers { display: flex; gap: 8px; margin: 14px 0; flex-wrap: wrap; }
+    .providers button { padding: 6px 14px; border: 1px solid var(--border); background: var(--panel); color: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all .15s; }
+    .providers button:hover:not(:disabled) { border-color: var(--accent); }
+    .providers button.active { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+    .providers button:disabled { opacity: .35; text-decoration: line-through; cursor: not-allowed; }
+
+    .history { flex: 1; overflow-y: auto; padding: 8px 4px 16px; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+    .msg { max-width: 85%; padding: 12px 14px; border-radius: 10px; line-height: 1.6; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+    .msg.user { align-self: flex-end; background: rgba(0, 212, 255, .12); border: 1px solid rgba(0, 212, 255, .4); }
+    .msg.assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); }
+    .msg .tag { color: var(--accent); font-size: 11px; margin-bottom: 6px; font-weight: 600; letter-spacing: .5px; }
+    .msg .err { color: #f44; }
+    .cursor::after { content: '▋'; color: var(--accent); animation: blink 1s steps(2) infinite; margin-left: 2px; }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .empty { color: var(--muted); text-align: center; padding: 40px 20px; font-size: 13px; }
+
+    .input-area { border-top: 1px solid var(--border); padding-top: 14px; display: flex; gap: 10px; }
+    textarea { flex: 1; height: 72px; padding: 12px; font-size: 15px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; color: #fff; resize: none; font-family: inherit; }
+    textarea:focus { outline: none; border-color: var(--accent); }
+    .input-area button { padding: 0 18px; background: var(--accent); color: #000; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity .15s; white-space: nowrap; }
+    .input-area button:hover:not(:disabled) { opacity: .85; }
+    .input-area button:disabled { opacity: .35; cursor: not-allowed; }
+    .input-area button.secondary { background: var(--panel); color: var(--muted); border: 1px solid var(--border); }
+
+    .footer { text-align: center; margin-top: 12px; color: #555; font-size: 11px; }
+    .footer a { color: var(--accent); text-decoration: none; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>AI API <span>中转站</span></h1>
-    <p class="sub">选择 AI 供应商，Key 存在 EdgeOne 环境变量里</p>
+    <header>
+      <h1>AI API <span>中转站</span></h1>
+      <p class="sub">Key 存在 EdgeOne 环境变量，前端零暴露 · 支持流式多轮</p>
+      <div id="status">正在加载配置...</div>
+    </header>
 
-    <div class="providers">
-      <button class="active" data-provider="openai">OpenAI</button>
-      <button data-provider="gemini">Gemini</button>
-      <button data-provider="claude">Claude</button>
+    <div class="providers" id="providers"></div>
+
+    <div class="history" id="history">
+      <div class="empty" id="emptyHint">输入问题开始对话 · Enter 发送 / Shift+Enter 换行</div>
     </div>
 
-    <textarea id="prompt" placeholder="输入你的问题...">用三句话解释量子力学</textarea>
-    <button id="send" onclick="ask()">发送请求</button>
+    <div class="input-area">
+      <textarea id="prompt" placeholder="输入你的问题...">用三句话解释量子力学</textarea>
+      <button id="send" onclick="ask()" disabled>发送</button>
+      <button class="secondary" id="clear" onclick="clearChat()" title="清空对话">清空</button>
+    </div>
 
-    <div id="result"></div>
-
+    <div class="footer">
+      基于 <a href="https://0l.cl" target="_blank">0L.cl</a>
+    </div>
   </div>
 
   <script>
     let provider = 'openai';
-    document.querySelectorAll('.providers button').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.providers button').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        provider = btn.dataset.provider;
+    let config = null;
+    let messages = []; // 多轮上下文: [{role:'user'|'assistant', content}]
+
+    const $ = id => document.getElementById(id);
+
+    async function loadConfig() {
+      const status = $('status');
+      try {
+        const res = await fetch('/api/config');
+        config = await res.json();
+
+        if (!config.chatEnabled) {
+          document.body.innerHTML = `<div style="text-align:center;padding:60px 20px;color:#888"><h2 style="color:#00d4ff;margin-bottom:12px">🔌 API 模式</h2><p>聊天页面已关闭，仅开放 API 接口。</p><p style="font-size:13px;margin-top:8px">使用 <code style="background:#111;padding:2px 6px;border-radius:4px">POST /api/chat</code> 或 <code style="background:#111;padding:2px 6px;border-radius:4px">POST /v1/chat/completions</code></p></div>`;
+          return;
+        }
+
+        renderProviders(config.providers);
+        const okCount = config.providers.filter(p => p.hasKey).length;
+        status.textContent = `已加载 ${okCount}/${config.providers.length} 个供应商 · 默认 ${config.defaultProvider}`;
+        $('send').disabled = false;
+      } catch (e) {
+        status.textContent = '⚠️ 加载配置失败，请检查部署';
+        status.className = 'error';
+      }
+    }
+
+    function renderProviders(providers) {
+      const container = $('providers');
+      container.innerHTML = providers.map((p, i) =>
+        `<button class="${i === 0 ? 'active' : ''} ${p.hasKey ? '' : 'offline'}"
+                 data-provider="${p.id}"
+                 ${p.hasKey ? '' : 'disabled title="未配置 API Key"'}>${p.id.toUpperCase()}</button>`
+      ).join('');
+
+      const first = providers.find(p => p.hasKey);
+      if (first) provider = first.id;
+
+      container.querySelectorAll('button:not(:disabled)').forEach(btn => {
+        btn.addEventListener('click', () => {
+          container.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          provider = btn.dataset.provider;
+        });
       });
-    });
+    }
+
+    function addMessage(role, content, tag) {
+      const history = $('history');
+      $('emptyHint')?.remove();
+      const el = document.createElement('div');
+      el.className = `msg ${role}`;
+      if (role === 'assistant' && tag) {
+        const t = document.createElement('div');
+        t.className = 'tag';
+        t.textContent = tag;
+        el.appendChild(t);
+        const body = document.createElement('div');
+        body.className = 'body';
+        body.textContent = content;
+        el.appendChild(body);
+      } else {
+        el.textContent = content;
+      }
+      history.appendChild(el);
+      history.scrollTop = history.scrollHeight;
+      return role === 'assistant' ? el.querySelector('.body') : el;
+    }
+
+    function scrollToBottom() {
+      const h = $('history');
+      h.scrollTop = h.scrollHeight;
+    }
 
     async function ask() {
-      const result = document.getElementById('result');
-      const send = document.getElementById('send');
-      const prompt = document.getElementById('prompt').value.trim();
-      if (!prompt) return;
+      const textarea = $('prompt');
+      const input = textarea.value.trim();
+      if (!input) return;
 
-      result.innerHTML = '<span style="color:#888">⏳ 请求中...</span>';
+      addMessage('user', input);
+      messages.push({ role: 'user', content: input });
+      textarea.value = '';
+
+      const send = $('send');
       send.disabled = true;
+      const bodyEl = addMessage('assistant', '', provider.toUpperCase());
+      bodyEl.classList.add('cursor');
+      bodyEl.textContent = '';
 
       try {
+        // 同源请求，后端 checkAuth 放行；无需带 token
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider, prompt })
+          body: JSON.stringify({ provider, messages, stream: true }),
         });
-        const data = await res.json();
-        result.innerHTML = `<div class="label">${provider.toUpperCase()} 回复</div>${data.content || data.error || JSON.stringify(data)}`;
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: { message: 'HTTP ' + res.status } }));
+          bodyEl.classList.remove('cursor');
+          bodyEl.className = 'err';
+          bodyEl.textContent = '❌ ' + (err.error?.message || res.status);
+          // 失败的 user 消息回滚，避免上下文污染
+          messages.pop();
+          return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let full = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          full += decoder.decode(value, { stream: true });
+          bodyEl.textContent = full;
+          scrollToBottom();
+        }
+        bodyEl.classList.remove('cursor');
+        if (full) {
+          messages.push({ role: 'assistant', content: full });
+        } else {
+          bodyEl.className = 'err';
+          bodyEl.textContent = '⚠️ 空响应';
+          messages.pop();
+        }
       } catch (e) {
-        result.innerHTML = `<span style="color:#f44">❌ ${e.message}</span>`;
+        bodyEl.classList.remove('cursor');
+        bodyEl.className = 'err';
+        bodyEl.textContent = '❌ ' + e.message;
+        messages.pop();
       } finally {
         send.disabled = false;
+        textarea.focus();
       }
     }
+
+    function clearChat() {
+      messages = [];
+      const history = $('history');
+      history.innerHTML = '<div class="empty" id="emptyHint">输入问题开始对话 · Enter 发送 / Shift+Enter 换行</div>';
+    }
+
+    // Enter 发送 / Shift+Enter 换行
+    $('prompt').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        ask();
+      }
+    });
+
+    loadConfig();
   </script>
 </body>
 </html>
