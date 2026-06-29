@@ -13,7 +13,7 @@
 
 ### 2. 配置环境变量
 
-在 EdgeOne Pages 后台 → Makers → project → project setting：
+在 EdgeOne (https://console.tencentcloud.com/edgeone/zones) 后台 → Makers → project → project setting → Environment Variables：
 
 | 变量名 | 必填 | 说明 | 示例 |
 |--------|------|------|------|
