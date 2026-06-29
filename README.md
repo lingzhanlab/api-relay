@@ -147,7 +147,6 @@ SSE 事件顺序遵循 OpenAI 规范：`delta... → finish → usage → [DONE]
 ## 安全说明
 
 - API Key 存储在 EdgeOne 环境变量中，不出现在 GitHub 代码里
-- **`/api/config` 不再返回 `accessToken`**（旧版会把访问密钥暴露给前端，存在 XSS 风险）
 - 鉴权策略：
   - 浏览器同源访问自带聊天页 → 自动放行（靠 `Origin` 头判断同源）
   - 外部 API 调用 → 必须带 `Authorization: Bearer <token>` 或 `X-API-Token: <token>`
