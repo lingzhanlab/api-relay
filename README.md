@@ -1,6 +1,6 @@
 # API 中转站
 
-一键部署到 EdgeOne Pages 的免费 AI API 中转站。支持 OpenAI / Gemini / Claude / 自定义供应商，解决**跨境访问 + Key 隐藏 + CORS 跨域**，附带多轮对话与流式输出。
+一键免费部署到 EdgeOne Макеrs 的免费 API 中转站。支持 OpenAI / Gemini / Claude / 自定义供应商，解决**跨境访问 + Key 隐藏 + CORS 跨域**，附带多轮对话与流式输出。
 
 ## 快速开始
 
